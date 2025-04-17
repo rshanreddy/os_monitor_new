@@ -40,9 +40,12 @@ jobs:
         
     - name: Create GitHub App private key
       run: |
-        echo "${{ secrets.APP_PRIVATE_KEY }}" > github_app_private_key.pem
+        # Ensure key starts and ends with proper markers and has correct line endings
+        echo "-----BEGIN RSA PRIVATE KEY-----" > github_app_private_key.pem
+        echo "${{ secrets.APP_PRIVATE_KEY }}" | sed 's/\\n/\n/g' | grep -v "KEY" >> github_app_private_key.pem
+        echo "-----END RSA PRIVATE KEY-----" >> github_app_private_key.pem
         chmod 600 github_app_private_key.pem
-        ls -la github_app_private_key.pem
+        cat github_app_private_key.pem # Debug output
         
     - name: Run daily monitor with debug output
       env:
@@ -107,8 +110,17 @@ jobs:
         BASECAMP_PROJECT_ID: ${{ secrets.BASECAMP_PROJECT_ID }}
         BASECAMP_MESSAGE_BOARD_ID: ${{ secrets.BASECAMP_MESSAGE_BOARD_ID }}
       run: |
-        curl -v -X POST "https://3.basecampapi.com/$BASECAMP_ACCOUNT_ID/buckets/$BASECAMP_PROJECT_ID/message_boards/$BASECAMP_MESSAGE_BOARD_ID/messages.json" \
-          -H "Authorization: Bearer $BASECAMP_ACCESS_TOKEN" \
+        # Create notification script
+        cat > notify.sh << 'EOL'
+        #!/bin/bash
+        url="https://3.basecampapi.com/${BASECAMP_ACCOUNT_ID}/buckets/${BASECAMP_PROJECT_ID}/message_boards/${BASECAMP_MESSAGE_BOARD_ID}/messages.json"
+        curl -v -X POST "${url}" \
+          -H "Authorization: Bearer ${BASECAMP_ACCESS_TOKEN}" \
           -H "Content-Type: application/json" \
           -H "User-Agent: DailyOSMonitor (someone@example.com)" \
           -d '{"subject":"Daily OS Monitor Failed","content":"<p>The daily OS monitor workflow failed. Please check the GitHub Actions logs.</p>","status":"active"}'
+        EOL
+        
+        # Make script executable and run it
+        chmod +x notify.sh
+        ./notify.sh
