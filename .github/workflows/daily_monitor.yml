@@ -40,14 +40,8 @@ jobs:
         
     - name: Create GitHub App private key
       run: |
-        # Write the private key with proper line endings
-        echo "${{ secrets.APP_PRIVATE_KEY }}" | sed 's/\\n/\n/g' > github_app_private_key.pem
+        echo "${{ secrets.APP_PRIVATE_KEY }}" > github_app_private_key.pem
         chmod 600 github_app_private_key.pem
-        # Debug output (only show file permissions and first/last lines)
-        ls -l github_app_private_key.pem
-        echo "First and last lines of key file:"
-        head -n 1 github_app_private_key.pem
-        tail -n 1 github_app_private_key.pem
         
     - name: Run daily monitor with debug output
       env:
@@ -106,25 +100,9 @@ jobs:
         
     - name: Notify on failure
       if: failure()
-      env:
-        BASECAMP_ACCESS_TOKEN: ${{ secrets.BASECAMP_ACCESS_TOKEN }}
-        BASECAMP_ACCOUNT_ID: ${{ secrets.BASECAMP_ACCOUNT_ID }}
-        BASECAMP_PROJECT_ID: ${{ secrets.BASECAMP_PROJECT_ID }}
-        BASECAMP_MESSAGE_BOARD_ID: ${{ secrets.BASECAMP_MESSAGE_BOARD_ID }}
       run: |
-        # Construct URL safely
-        BASECAMP_URL="https://3.basecampapi.com/${BASECAMP_ACCOUNT_ID}/buckets/${BASECAMP_PROJECT_ID}/message_boards/${BASECAMP_MESSAGE_BOARD_ID}/messages.json"
-        echo "Posting to URL: ${BASECAMP_URL}"
-        
-        # Make the API call
-        curl --fail -X POST "${BASECAMP_URL}" \
-          -H "Authorization: Bearer ${BASECAMP_ACCESS_TOKEN}" \
+        curl -X POST "https://3.basecampapi.com/${{ secrets.BASECAMP_ACCOUNT_ID }}/buckets/${{ secrets.BASECAMP_PROJECT_ID }}/message_boards/${{ secrets.BASECAMP_MESSAGE_BOARD_ID }}/messages.json" \
+          -H "Authorization: Bearer ${{ secrets.BASECAMP_ACCESS_TOKEN }}" \
           -H "Content-Type: application/json" \
           -H "User-Agent: DailyOSMonitor (someone@example.com)" \
-          -d @- << EOF
-        {
-          "subject": "Daily OS Monitor Failed",
-          "content": "<p>The daily OS monitor workflow failed. Please check the GitHub Actions logs.</p>",
-          "status": "active"
-        }
-        EOF
+          -d '{"subject":"Daily OS Monitor Failed","content":"<p>The daily OS monitor workflow failed. Please check the GitHub Actions logs.</p>","status":"active"}'
