@@ -1,0 +1,7 @@
+pandas
+pyairtable
+anthropic
+python-dotenv
+PyGithub
+markdown
+requests 

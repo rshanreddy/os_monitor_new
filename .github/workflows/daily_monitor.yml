@@ -1,0 +1,82 @@
+name: Daily AI Repository Monitor
+
+on:
+  schedule:
+    # Run at 10:00 UTC (3:00 AM PST)
+    - cron: '0 10 * * *'
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Create necessary directories
+      run: |
+        mkdir -p logs/daily
+        mkdir -p logs/weekly
+        
+    - name: Create GitHub App private key
+      run: |
+        echo "${{ secrets.GITHUB_APP_PRIVATE_KEY }}" > github_app_private_key.pem
+        chmod 600 github_app_private_key.pem
+        
+    - name: Run daily monitor
+      env:
+        AIRTABLE_API_KEY: ${{ secrets.AIRTABLE_API_KEY }}
+        AIRTABLE_BASE_ID: ${{ secrets.AIRTABLE_BASE_ID }}
+        AIRTABLE_TABLE_NAME: "All Repos"
+        BASECAMP_ACCOUNT_ID: ${{ secrets.BASECAMP_ACCOUNT_ID }}
+        BASECAMP_PROJECT_ID: ${{ secrets.BASECAMP_PROJECT_ID }}
+        BASECAMP_ACCESS_TOKEN: ${{ secrets.BASECAMP_ACCESS_TOKEN }}
+        APP_ID: ${{ secrets.APP_ID }}
+        PRIVATE_KEY_PATH: "github_app_private_key.pem"
+        INSTALLATION_ID: ${{ secrets.INSTALLATION_ID }}
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        ANTHROPIC_TOKEN: ${{ secrets.ANTHROPIC_API_KEY }}
+        ENV: "prod"
+      run: |
+        python daily_osmonitor.py
+        
+    - name: Upload logs and reports
+      if: always()  # Run even if the script fails
+      uses: actions/upload-artifact@v3
+      with:
+        name: daily-monitor-artifacts
+        path: |
+          logs/
+          *.csv
+          *.log
+        retention-days: 7
+        
+    - name: Clean up sensitive files
+      if: always()
+      run: |
+        rm -f github_app_private_key.pem
+        
+    - name: Notify on failure
+      if: failure()
+      env:
+        BASECAMP_ACCESS_TOKEN: ${{ secrets.BASECAMP_ACCESS_TOKEN }}
+        BASECAMP_ACCOUNT_ID: ${{ secrets.BASECAMP_ACCOUNT_ID }}
+        BASECAMP_PROJECT_ID: ${{ secrets.BASECAMP_PROJECT_ID }}
+      run: |
+        curl -X POST \
+          -H "Authorization: Bearer $BASECAMP_ACCESS_TOKEN" \
+          -H "Content-Type: application/json" \
+          -H "User-Agent: DailyOSMonitor (someone@example.com)" \
+          -d "{\"subject\":\"Daily OS Monitor Failed\",\"content\":\"<p>The daily OS monitor workflow failed. Please check the GitHub Actions logs.</p>\",\"status\":\"active\"}" \
+          "https://3.basecampapi.com/$BASECAMP_ACCOUNT_ID/buckets/$BASECAMP_PROJECT_ID/message_boards/${{ secrets.BASECAMP_MESSAGE_BOARD_ID }}/messages.json"
